@@ -1,4 +1,7 @@
+import { db } from '../db';
+import { sessionsTable, usersTable } from '../db/schema';
 import { type Session, type User } from '../schema';
+import { eq, gt } from 'drizzle-orm';
 
 export interface GetSessionResponse {
     session: Session;
@@ -6,11 +9,44 @@ export interface GetSessionResponse {
 }
 
 export async function getSession(sessionId: string): Promise<GetSessionResponse | null> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to:
-    // 1. Query the database for the session with the given ID
-    // 2. Check if the session has expired
-    // 3. If valid, join with user data
-    // 4. Return session and user data, or null if invalid/expired
-    return Promise.resolve(null);
+    try {
+        // Query session with joined user data
+        const result = await db.select()
+            .from(sessionsTable)
+            .innerJoin(usersTable, eq(sessionsTable.user_id, usersTable.id))
+            .where(eq(sessionsTable.id, sessionId))
+            .execute();
+
+        if (result.length === 0) {
+            return null;
+        }
+
+        const { sessions: sessionData, users: userData } = result[0];
+
+        // Check if session has expired
+        const now = new Date();
+        if (sessionData.expires_at <= now) {
+            return null;
+        }
+
+        // Return session and user data
+        return {
+            session: {
+                id: sessionData.id,
+                user_id: sessionData.user_id,
+                expires_at: sessionData.expires_at,
+                created_at: sessionData.created_at,
+            },
+            user: {
+                id: userData.id,
+                email: userData.email,
+                name: userData.name,
+                created_at: userData.created_at,
+                updated_at: userData.updated_at,
+            }
+        };
+    } catch (error) {
+        console.error('Session retrieval failed:', error);
+        throw error;
+    }
 }
